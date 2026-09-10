@@ -4,6 +4,9 @@
 /build
 /tmp
 
+# Generated Prisma client (recreated by `prisma generate` on install)
+/src/generated
+
 # Logs
 logs
 *.log

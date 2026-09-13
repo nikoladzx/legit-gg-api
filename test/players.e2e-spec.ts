@@ -1,17 +1,14 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
-import type { Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
-import { Player } from '../src/modules/player/player.entity.js';
+import { resetDatabase } from './reset-database.js';
 
 const steamId = '76561198000000000';
 const unknownId = '00000000-0000-0000-0000-000000000000';
 
 describe('Players (e2e)', () => {
   let app: INestApplication;
-  let players: Repository<Player>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -20,15 +17,14 @@ describe('Players (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    players = app.get(getRepositoryToken(Player));
   });
 
   beforeEach(async () => {
-    await players.clear();
+    await resetDatabase(app);
   });
 
   afterEach(async () => {
-    await players.clear();
+    await resetDatabase(app);
   });
 
   afterAll(async () => {

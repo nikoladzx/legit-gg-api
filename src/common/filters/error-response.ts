@@ -1,9 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
 
-/**
- * The single error envelope shape every failed request returns. `errors` is only
- * populated for validation failures.
- */
 export interface ErrorResponseBody {
   statusCode: number;
   error: string;

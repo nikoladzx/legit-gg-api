@@ -4,6 +4,7 @@ import { CommonModule } from '#/common/common.module.js';
 import { validateEnv } from '#/config/env.schema.js';
 import { DatabaseModule } from '#/database/database.module.js';
 import { HealthModule } from '#/health/health.module.js';
+import { AuthModule } from '#/modules/auth/auth.module.js';
 import { PlayerModule } from '#/modules/player/player.module.js';
 
 @Module({
@@ -17,6 +18,7 @@ import { PlayerModule } from '#/modules/player/player.module.js';
     DatabaseModule,
     HealthModule,
     PlayerModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

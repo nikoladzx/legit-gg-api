@@ -16,6 +16,13 @@ export const envSchema = z.object({
         .map((origin) => origin.trim())
         .filter(Boolean),
     ),
+  APP_BASE_URL: z.url().default('http://localhost:3000'),
+  STEAM_API_KEY: z.string().min(1),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^\d+\s*(ms|s|m|h|d|w|y)$/, 'JWT_EXPIRES_IN must be like "7d" or "15m"')
+    .default('7d'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -37,5 +44,9 @@ export function getEnv(config: ConfigService<Env, true>): Env {
     PORT: config.get('PORT', { infer: true }),
     DATABASE_URL: config.get('DATABASE_URL', { infer: true }),
     CORS_ORIGINS: config.get('CORS_ORIGINS', { infer: true }),
+    APP_BASE_URL: config.get('APP_BASE_URL', { infer: true }),
+    STEAM_API_KEY: config.get('STEAM_API_KEY', { infer: true }),
+    JWT_SECRET: config.get('JWT_SECRET', { infer: true }),
+    JWT_EXPIRES_IN: config.get('JWT_EXPIRES_IN', { infer: true }),
   };
 }

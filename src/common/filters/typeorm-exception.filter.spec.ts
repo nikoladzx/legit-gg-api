@@ -1,8 +1,8 @@
 import type { ArgumentsHost } from '@nestjs/common';
 import { HttpStatus } from '@nestjs/common';
 import type { HttpAdapterHost } from '@nestjs/core';
-import { PrismaClientExceptionFilter } from '#/common/filters/prisma-client-exception.filter.js';
-import { Prisma } from '#/generated/prisma/client.js';
+import { QueryFailedError } from 'typeorm';
+import { TypeOrmExceptionFilter } from '#/common/filters/typeorm-exception.filter.js';
 
 const reply = vi.fn();
 
@@ -20,24 +20,29 @@ const host = {
   }),
 } as unknown as ArgumentsHost;
 
-function knownError(
-  code: string,
-  meta?: Record<string, unknown>,
-): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('db error', {
-    code,
-    clientVersion: 'test',
-    meta,
+function queryFailedError(
+  driverError: Record<string, unknown>,
+): QueryFailedError {
+  return new QueryFailedError('query', [], {
+    name: 'error',
+    message: 'db error',
+    ...driverError,
   });
 }
 
-describe('PrismaClientExceptionFilter', () => {
-  const filter = new PrismaClientExceptionFilter(httpAdapterHost);
+describe('TypeOrmExceptionFilter', () => {
+  const filter = new TypeOrmExceptionFilter(httpAdapterHost);
 
   beforeEach(() => reply.mockClear());
 
-  it('maps a unique constraint violation (P2002) to 409, naming the field', () => {
-    filter.catch(knownError('P2002', { target: ['steam_id'] }), host);
+  it('maps a unique constraint violation (23505) to 409, naming the field', () => {
+    filter.catch(
+      queryFailedError({
+        code: '23505',
+        detail: 'Key (steam_id)=(76561198000000000) already exists.',
+      }),
+      host,
+    );
 
     expect(reply).toHaveBeenCalledWith(
       expect.anything(),
@@ -52,37 +57,40 @@ describe('PrismaClientExceptionFilter', () => {
     );
   });
 
-  it('maps P2002 to 409 with the model name when the driver adapter omits target', () => {
-    filter.catch(knownError('P2002', { modelName: 'Player' }), host);
+  it('maps 23505 to 409 with a generic message when detail is unavailable', () => {
+    filter.catch(queryFailedError({ code: '23505' }), host);
 
     expect(reply).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         statusCode: 409,
-        message: 'A Player with these details already exists',
+        message: 'A record with these details already exists',
       }),
       HttpStatus.CONFLICT,
     );
   });
 
-  it('maps a missing record (P2025) to 404 using the model name', () => {
-    filter.catch(knownError('P2025', { modelName: 'Player' }), host);
+  it('maps a foreign key violation (23503) to 409', () => {
+    filter.catch(queryFailedError({ code: '23503' }), host);
 
     expect(reply).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ statusCode: 404, message: 'Player not found' }),
-      HttpStatus.NOT_FOUND,
+      expect.objectContaining({
+        statusCode: 409,
+        message: 'Related record constraint failed',
+      }),
+      HttpStatus.CONFLICT,
     );
   });
 
   it('maps an unknown code to 400 and echoes the code', () => {
-    filter.catch(knownError('P2010'), host);
+    filter.catch(queryFailedError({ code: '22999' }), host);
 
     expect(reply).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         statusCode: 400,
-        message: 'Database request error (P2010)',
+        message: 'Database request error (22999)',
       }),
       HttpStatus.BAD_REQUEST,
     );

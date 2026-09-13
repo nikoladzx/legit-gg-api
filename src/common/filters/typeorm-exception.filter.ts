@@ -5,17 +5,24 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
-import { Prisma } from '#/generated/prisma/client.js';
+import { QueryFailedError } from 'typeorm';
 import { buildErrorBody } from '#/common/filters/error-response.js';
 
-@Catch(Prisma.PrismaClientKnownRequestError)
-export class PrismaClientExceptionFilter implements ExceptionFilter {
+const UNIQUE_VIOLATION = '23505';
+const FOREIGN_KEY_VIOLATION = '23503';
+const STRING_DATA_RIGHT_TRUNCATION = '22001';
+
+interface PgDriverError {
+  code?: string;
+  detail?: string;
+  constraint?: string;
+}
+
+@Catch(QueryFailedError)
+export class TypeOrmExceptionFilter implements ExceptionFilter {
   constructor(private readonly httpAdapterHost: HttpAdapterHost) {}
 
-  catch(
-    exception: Prisma.PrismaClientKnownRequestError,
-    host: ArgumentsHost,
-  ): void {
+  catch(exception: QueryFailedError, host: ArgumentsHost): void {
     const { httpAdapter } = this.httpAdapterHost;
     const ctx = host.switchToHttp();
     const path = httpAdapter.getRequestUrl(ctx.getRequest()) as string;
@@ -29,38 +36,28 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
     );
   }
 
-  private toHttp(exception: Prisma.PrismaClientKnownRequestError): {
+  private toHttp(exception: QueryFailedError): {
     status: number;
     message: string;
   } {
-    const meta = (exception.meta ?? {}) as Record<string, unknown>;
-    const model =
-      typeof meta.modelName === 'string' ? meta.modelName : 'Record';
+    const driverError = exception.driverError as PgDriverError;
 
-    switch (exception.code) {
-      case 'P2002': {
-        const target = Array.isArray(meta.target)
-          ? meta.target.join(', ')
-          : null;
+    switch (driverError.code) {
+      case UNIQUE_VIOLATION: {
+        const column = driverError.detail?.match(/^Key \(([^)]+)\)=/)?.[1];
         return {
           status: HttpStatus.CONFLICT,
-          message: target
-            ? `A record with this ${target} already exists`
-            : `A ${model} with these details already exists`,
+          message: column
+            ? `A record with this ${column} already exists`
+            : 'A record with these details already exists',
         };
       }
-      case 'P2025':
-        return {
-          status: HttpStatus.NOT_FOUND,
-          message:
-            typeof meta.cause === 'string' ? meta.cause : `${model} not found`,
-        };
-      case 'P2003':
+      case FOREIGN_KEY_VIOLATION:
         return {
           status: HttpStatus.CONFLICT,
           message: 'Related record constraint failed',
         };
-      case 'P2000':
+      case STRING_DATA_RIGHT_TRUNCATION:
         return {
           status: HttpStatus.BAD_REQUEST,
           message: 'Provided value is too long',
@@ -68,7 +65,7 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
       default:
         return {
           status: HttpStatus.BAD_REQUEST,
-          message: `Database request error (${exception.code})`,
+          message: `Database request error (${driverError.code ?? 'unknown'})`,
         };
     }
   }

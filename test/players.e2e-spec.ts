@@ -1,15 +1,17 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
+import type { Repository } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
-import { PrismaService } from '../src/database/prisma.service.js';
+import { Player } from '../src/modules/player/player.entity.js';
 
 const steamId = '76561198000000000';
 const unknownId = '00000000-0000-0000-0000-000000000000';
 
 describe('Players (e2e)', () => {
   let app: INestApplication;
-  let prisma: PrismaService;
+  let players: Repository<Player>;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -18,15 +20,15 @@ describe('Players (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     await app.init();
-    prisma = app.get(PrismaService);
+    players = app.get(getRepositoryToken(Player));
   });
 
   beforeEach(async () => {
-    await prisma.player.deleteMany();
+    await players.clear();
   });
 
   afterEach(async () => {
-    await prisma.player.deleteMany();
+    await players.clear();
   });
 
   afterAll(async () => {

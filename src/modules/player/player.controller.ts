@@ -9,11 +9,11 @@ import {
   Post,
 } from '@nestjs/common';
 import { ZodValidationPipe } from '#/common/pipes/zod-validation.pipe.js';
-import type { Player } from '#/generated/prisma/client.js';
 import {
   createPlayerSchema,
   type CreatePlayerDto,
 } from '#/modules/player/dto/create-player.dto.js';
+import type { Player } from '#/modules/player/player.entity.js';
 import { PlayerService } from '#/modules/player/player.service.js';
 
 @Controller('players')

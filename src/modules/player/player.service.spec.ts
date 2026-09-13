@@ -1,7 +1,8 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { PrismaService } from '#/database/prisma.service.js';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { PlayerService } from '#/modules/player/player.service.js';
+import { Player } from '#/modules/player/player.entity.js';
 
 const player = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -12,66 +13,69 @@ const player = {
 
 describe('PlayerService', () => {
   let service: PlayerService;
-  let prisma: {
-    player: {
-      create: ReturnType<typeof vi.fn>;
-      findMany: ReturnType<typeof vi.fn>;
-      findUnique: ReturnType<typeof vi.fn>;
-      delete: ReturnType<typeof vi.fn>;
-    };
+  let players: {
+    create: ReturnType<typeof vi.fn>;
+    save: ReturnType<typeof vi.fn>;
+    find: ReturnType<typeof vi.fn>;
+    findOneBy: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(async () => {
-    prisma = {
-      player: {
-        create: vi.fn(),
-        findMany: vi.fn(),
-        findUnique: vi.fn(),
-        delete: vi.fn(),
-      },
+    players = {
+      create: vi.fn(),
+      save: vi.fn(),
+      find: vi.fn(),
+      findOneBy: vi.fn(),
+      delete: vi.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [PlayerService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        PlayerService,
+        { provide: getRepositoryToken(Player), useValue: players },
+      ],
     }).compile();
 
     service = module.get(PlayerService);
   });
 
   describe('create', () => {
-    it('passes the dto straight to prisma and returns the row', async () => {
-      prisma.player.create.mockResolvedValue(player);
+    it('creates and saves the entity, returning the row', async () => {
+      players.create.mockReturnValue(player);
+      players.save.mockResolvedValue(player);
 
       await expect(
         service.create({ steamId: player.steamId }),
       ).resolves.toEqual(player);
 
-      expect(prisma.player.create).toHaveBeenCalledWith({
-        data: { steamId: player.steamId },
+      expect(players.create).toHaveBeenCalledWith({
+        steamId: player.steamId,
       });
+      expect(players.save).toHaveBeenCalledWith(player);
     });
   });
 
   describe('findAll', () => {
     it('returns players newest first', async () => {
-      prisma.player.findMany.mockResolvedValue([player]);
+      players.find.mockResolvedValue([player]);
 
       await expect(service.findAll()).resolves.toEqual([player]);
-      expect(prisma.player.findMany).toHaveBeenCalledWith({
-        orderBy: { createdAt: 'desc' },
+      expect(players.find).toHaveBeenCalledWith({
+        order: { createdAt: 'DESC' },
       });
     });
   });
 
   describe('findOne', () => {
     it('returns the player when it exists', async () => {
-      prisma.player.findUnique.mockResolvedValue(player);
+      players.findOneBy.mockResolvedValue(player);
 
       await expect(service.findOne(player.id)).resolves.toEqual(player);
     });
 
     it('throws a 404 when it does not', async () => {
-      prisma.player.findUnique.mockResolvedValue(null);
+      players.findOneBy.mockResolvedValue(null);
 
       await expect(service.findOne('missing')).rejects.toThrow(
         NotFoundException,
@@ -81,33 +85,39 @@ describe('PlayerService', () => {
 
   describe('findBySteamId', () => {
     it('looks the player up by steamId', async () => {
-      prisma.player.findUnique.mockResolvedValue(player);
+      players.findOneBy.mockResolvedValue(player);
 
       await expect(service.findBySteamId(player.steamId)).resolves.toEqual(
         player,
       );
-      expect(prisma.player.findUnique).toHaveBeenCalledWith({
-        where: { steamId: player.steamId },
+      expect(players.findOneBy).toHaveBeenCalledWith({
+        steamId: player.steamId,
       });
     });
 
     it('throws a 404 when it does not exist', async () => {
-      prisma.player.findUnique.mockResolvedValue(null);
+      players.findOneBy.mockResolvedValue(null);
 
-      await expect(service.findBySteamId('76561198000000001')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.findBySteamId('76561198000000001'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('remove', () => {
-    it('delegates to prisma.player.delete', async () => {
-      prisma.player.delete.mockResolvedValue(player);
+    it('delegates to players.delete', async () => {
+      players.delete.mockResolvedValue({ affected: 1 });
 
       await expect(service.remove(player.id)).resolves.toBeUndefined();
-      expect(prisma.player.delete).toHaveBeenCalledWith({
-        where: { id: player.id },
-      });
+      expect(players.delete).toHaveBeenCalledWith({ id: player.id });
+    });
+
+    it('throws a 404 when nothing was deleted', async () => {
+      players.delete.mockResolvedValue({ affected: 0 });
+
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

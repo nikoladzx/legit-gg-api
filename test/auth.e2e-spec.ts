@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
@@ -21,7 +21,7 @@ const profile = {
 const steamOpenId = {
   buildRedirectUrl: () =>
     'https://steamcommunity.com/openid/login?openid.mode=checkid_setup',
-  verifyCallback: async () => steamId,
+  verifyCallback: vi.fn(async () => steamId),
 };
 const steamApi = { fetchProfile: async () => profile };
 
@@ -59,9 +59,12 @@ describe('Auth (e2e)', () => {
     const res = await request(app.getHttpServer())
       .get('/auth/steam/return')
       .query({ 'openid.mode': 'id_res' })
-      .expect(200);
+      .expect(302);
 
-    return res.body.accessToken;
+    const token = new URL(res.headers.location).searchParams.get('token');
+    expect(token).toEqual(expect.any(String));
+
+    return token as string;
   }
 
   it('GET /auth/steam redirects to Steam', async () => {
@@ -72,14 +75,58 @@ describe('Auth (e2e)', () => {
     expect(res.headers.location).toContain('steamcommunity.com/openid/login');
   });
 
-  it('GET /auth/steam/return issues a token and the display info', async () => {
+  it('GET /auth/steam/return redirects to the frontend carrying the token', async () => {
     const res = await request(app.getHttpServer())
       .get('/auth/steam/return')
       .query({ 'openid.mode': 'id_res' })
+      .expect(302);
+
+    const location = new URL(res.headers.location);
+    expect(location.origin + location.pathname).toBe(
+      'http://localhost:3000/auth/callback',
+    );
+    expect(location.searchParams.get('token')).toEqual(expect.any(String));
+  });
+
+  it('redirects with error=cancelled when the user cancels at Steam', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/auth/steam/return')
+      .query({ 'openid.mode': 'cancel' })
+      .expect(302);
+
+    const location = new URL(res.headers.location);
+    expect(location.origin + location.pathname).toBe(
+      'http://localhost:3000/auth/callback',
+    );
+    expect(location.searchParams.get('error')).toBe('cancelled');
+    expect(location.searchParams.has('token')).toBe(false);
+  });
+
+  it('redirects with error=failed when verification fails', async () => {
+    steamOpenId.verifyCallback.mockRejectedValueOnce(
+      new UnauthorizedException('Steam could not verify this sign-in'),
+    );
+
+    const res = await request(app.getHttpServer())
+      .get('/auth/steam/return')
+      .query({ 'openid.mode': 'id_res' })
+      .expect(302);
+
+    const location = new URL(res.headers.location);
+    expect(location.searchParams.get('error')).toBe('failed');
+    expect(location.searchParams.has('token')).toBe(false);
+    expect(await auths.count()).toBe(0);
+  });
+
+  it('issues a token that carries the Steam display info', async () => {
+    const token = await signIn();
+
+    const res = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    expect(res.body.accessToken).toEqual(expect.any(String));
-    expect(res.body.auth).toMatchObject({
+    expect(res.body).toMatchObject({
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
       profileUrl: profile.profileUrl,

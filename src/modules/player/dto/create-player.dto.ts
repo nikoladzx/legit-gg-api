@@ -1,9 +1,8 @@
 import { z } from 'zod';
+import { steamIdSchema } from '#/common/schemas/steam-id.schema.js';
 
 export const createPlayerSchema = z.object({
-  steamId: z
-    .string()
-    .regex(/^\d{17}$/, 'steamId must be a 17-digit SteamID64 value'),
+  steamId: steamIdSchema,
 });
 
 export type CreatePlayerDto = z.infer<typeof createPlayerSchema>;

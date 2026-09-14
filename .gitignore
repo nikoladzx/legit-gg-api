@@ -27,3 +27,4 @@ lerna-debug.log*
 .tmp
 CLAUDE.md
 README.md
+.claude/settings.json

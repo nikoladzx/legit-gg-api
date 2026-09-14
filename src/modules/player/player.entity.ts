@@ -2,6 +2,7 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -19,4 +20,13 @@ export class Player {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamp', precision: 3 })
   updatedAt: Date;
+
+  @Index('IDX_players_last_checked_at')
+  @Column({
+    name: 'last_checked_at',
+    type: 'timestamp',
+    precision: 3,
+    nullable: true,
+  })
+  lastCheckedAt: Date | null;
 }

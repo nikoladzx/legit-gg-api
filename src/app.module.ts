@@ -5,6 +5,7 @@ import { validateEnv } from '#/config/env.schema.js';
 import { DatabaseModule } from '#/database/database.module.js';
 import { HealthModule } from '#/health/health.module.js';
 import { AuthModule } from '#/modules/auth/auth.module.js';
+import { LeetifyStatsModule } from '#/modules/leetify-stats/leetify-stats.module.js';
 import { PlayerModule } from '#/modules/player/player.module.js';
 
 @Module({
@@ -19,6 +20,7 @@ import { PlayerModule } from '#/modules/player/player.module.js';
     HealthModule,
     PlayerModule,
     AuthModule,
+    LeetifyStatsModule,
   ],
 })
 export class AppModule {}

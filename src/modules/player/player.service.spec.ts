@@ -18,6 +18,7 @@ describe('PlayerService', () => {
     save: ReturnType<typeof vi.fn>;
     find: ReturnType<typeof vi.fn>;
     findOneBy: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
   };
 
@@ -27,6 +28,7 @@ describe('PlayerService', () => {
       save: vi.fn(),
       find: vi.fn(),
       findOneBy: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
     };
 
@@ -98,9 +100,63 @@ describe('PlayerService', () => {
     it('throws a 404 when it does not exist', async () => {
       players.findOneBy.mockResolvedValue(null);
 
+      await expect(service.findBySteamId('76561198000000001')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('findStaleSteamIds', () => {
+    const staleBefore = new Date('2026-08-15T00:00:00.000Z');
+
+    it('asks for never-checked rows or rows past the cutoff, capped', async () => {
+      players.find.mockResolvedValue([{ steamId: player.steamId }]);
+
+      await expect(service.findStaleSteamIds(staleBefore, 50)).resolves.toEqual(
+        [player.steamId],
+      );
+
+      const [options] = players.find.mock.calls[0];
+      expect(options.take).toBe(50);
+      expect(options.where[0].lastCheckedAt.type).toBe('isNull');
+      expect(options.where[1].lastCheckedAt.value).toEqual(staleBefore);
+    });
+
+    it('puts never-checked players ahead of every real timestamp', async () => {
+      players.find.mockResolvedValue([]);
+
+      await service.findStaleSteamIds(staleBefore, 50);
+
+      const [options] = players.find.mock.calls[0];
+      expect(options.order).toEqual({
+        lastCheckedAt: { direction: 'ASC', nulls: 'FIRST' },
+        createdAt: 'ASC',
+      });
+    });
+  });
+
+  describe('markChecked', () => {
+    it('stamps the cursor in one UPDATE, with no lookup first', async () => {
+      const checkedAt = new Date('2026-09-14T10:00:00.000Z');
+      players.update.mockResolvedValue({ affected: 1 });
+
       await expect(
-        service.findBySteamId('76561198000000001'),
-      ).rejects.toThrow(NotFoundException);
+        service.markChecked(player.steamId, checkedAt),
+      ).resolves.toBeUndefined();
+
+      expect(players.update).toHaveBeenCalledWith(
+        { steamId: player.steamId },
+        { lastCheckedAt: checkedAt },
+      );
+      expect(players.findOneBy).not.toHaveBeenCalled();
+    });
+
+    it('does not 404 when the player vanished mid-run, unlike remove', async () => {
+      players.update.mockResolvedValue({ affected: 0 });
+
+      await expect(
+        service.markChecked(player.steamId),
+      ).resolves.toBeUndefined();
     });
   });
 
